@@ -19,6 +19,7 @@ easy-fs-fuse/target/*
 tools/
 pushall.sh
 *.bak
+bootloader/rustsbi-qemu.bin
 
 user/
 ci-user/
