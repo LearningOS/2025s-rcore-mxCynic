@@ -43,8 +43,8 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 // TODO: implement the syscall
 pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     lazy_static! {
-        static ref ID_TIMES: UPSafeCell<[isize; 100]> = unsafe {
-            let data = [0; 100];
+        static ref ID_TIMES: UPSafeCell<[isize; 169]> = unsafe {
+            let data = [0; 169];
             UPSafeCell::new(data)
         };
     }
