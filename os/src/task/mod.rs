@@ -39,10 +39,14 @@ pub struct TaskManager {
     inner: UPSafeCell<TaskManagerInner>,
 }
 
+/// 系统调用id的最大值
+pub const SYSCALL_NUM: usize = 500;
+
 /// Inner of Task Manager
 pub struct TaskManagerInner {
     /// task list
     tasks: [TaskControlBlock; MAX_APP_NUM],
+    calltimes: [isize; SYSCALL_NUM],
     /// id of current `Running` task
     current_task: usize,
 }
@@ -59,12 +63,16 @@ lazy_static! {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
             task.task_status = TaskStatus::Ready;
         }
+
+        let calltimes = [0;500];
+
         TaskManager {
             num_app,
             inner: unsafe {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
                     current_task: 0,
+                    calltimes,
                 })
             },
         }
@@ -135,6 +143,16 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    fn calltime_add(&self, id: usize) {
+        let inner = &mut self.inner.exclusive_access();
+        inner.calltimes[id] += 1;
+    }
+
+    fn calltime(&self, id: usize) -> isize {
+        let inner = &self.inner.exclusive_access();
+        inner.calltimes[id]
+    }
 }
 
 /// Run the first task in task list.
@@ -156,6 +174,16 @@ fn mark_current_suspended() {
 /// Change the status of current `Running` task into `Exited`.
 fn mark_current_exited() {
     TASK_MANAGER.mark_current_exited();
+}
+
+/// 将系统调用编号为id的调用次数加1
+pub fn calltime_add(id: usize) {
+    TASK_MANAGER.calltime_add(id);
+}
+
+/// 查询calltime
+pub fn calltime(id: usize) -> isize {
+    TASK_MANAGER.calltime(id)
 }
 
 /// Suspend the current 'Running' task and run the next task in task list.
