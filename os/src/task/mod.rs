@@ -39,14 +39,10 @@ pub struct TaskManager {
     inner: UPSafeCell<TaskManagerInner>,
 }
 
-/// 系统调用id的最大值
-pub const SYSCALL_NUM: usize = 500;
-
 /// Inner of Task Manager
 pub struct TaskManagerInner {
     /// task list
     tasks: [TaskControlBlock; MAX_APP_NUM],
-    calltimes: [isize; SYSCALL_NUM],
     /// id of current `Running` task
     current_task: usize,
 }
@@ -55,16 +51,17 @@ lazy_static! {
     /// Global variable: TASK_MANAGER
     pub static ref TASK_MANAGER: TaskManager = {
         let num_app = get_num_app();
+        let call_times = [0;500];
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            call_times,
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
             task.task_status = TaskStatus::Ready;
         }
 
-        let calltimes = [0;500];
 
         TaskManager {
             num_app,
@@ -72,7 +69,6 @@ lazy_static! {
                 UPSafeCell::new(TaskManagerInner {
                     tasks,
                     current_task: 0,
-                    calltimes,
                 })
             },
         }
@@ -145,13 +141,15 @@ impl TaskManager {
     }
 
     fn calltime_add(&self, id: usize) {
+        let current_task = self.inner.exclusive_access().current_task;
         let inner = &mut self.inner.exclusive_access();
-        inner.calltimes[id] += 1;
+        inner.tasks[current_task].call_time_add(id);
     }
 
     fn calltime(&self, id: usize) -> isize {
+        let current_task = self.inner.exclusive_access().current_task;
         let inner = &self.inner.exclusive_access();
-        inner.calltimes[id]
+        inner.tasks[current_task].call_time(id)
     }
 }
 
