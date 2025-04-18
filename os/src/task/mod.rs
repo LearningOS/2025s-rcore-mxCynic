@@ -143,13 +143,13 @@ impl TaskManager {
     fn calltime_add(&self, id: usize) {
         let current_task = self.inner.exclusive_access().current_task;
         let inner = &mut self.inner.exclusive_access();
-        inner.tasks[current_task].call_time_add(id);
+        inner.tasks[current_task].calltime_add(id);
     }
 
     fn calltime(&self, id: usize) -> isize {
         let current_task = self.inner.exclusive_access().current_task;
         let inner = &self.inner.exclusive_access();
-        inner.tasks[current_task].call_time(id)
+        inner.tasks[current_task].calltime(id)
     }
 }
 
