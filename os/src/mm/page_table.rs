@@ -79,6 +79,11 @@ pub struct PageTable {
 }
 
 /// Assume that it won't oom when creating/mapping.
+impl Default for PageTable {
+    fn default() -> Self {
+        PageTable::new()
+    }
+}
 impl PageTable {
     /// Create a new page table
     pub fn new() -> Self {
