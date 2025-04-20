@@ -20,3 +20,4 @@ ci-user/
 os/vendor/
 user/
 bootloader/rustsbi-qemu.bin
+os/src/sbi.rs
