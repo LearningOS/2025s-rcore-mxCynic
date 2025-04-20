@@ -1,5 +1,13 @@
 //! Process management syscalls
-use crate::task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next};
+
+use crate::{
+    mm::{translated_byte_buffer, PageTable, VirtAddr},
+    task::{
+        call_time, change_program_brk, current_user_token, exit_current_and_run_next,
+        suspend_current_and_run_next,
+    },
+    timer::get_time_us,
+};
 
 #[repr(C)]
 #[derive(Debug)]
@@ -25,16 +33,71 @@ pub fn sys_yield() -> isize {
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    let us = get_time_us();
+    let time = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+    let token = current_user_token();
+    let ptr = ts as *const u8;
+    let len = core::mem::size_of::<TimeVal>();
+
+    let buffers = translated_byte_buffer(token, ptr, len);
+    let src = unsafe { core::slice::from_raw_parts(&time as *const TimeVal as *const u8, len) };
+    let mut offset = 0;
+
+    for buf in buffers {
+        if offset > len {
+            break;
+        }
+        let copy_len = buf.len().min(len - offset);
+        buf[..copy_len].copy_from_slice(&src[offset..offset + copy_len]);
+        offset += copy_len;
+    }
+
+    if offset == len {
+        0
+    } else {
+        -1
+    }
 }
 
 /// TODO: Finish sys_trace to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
-pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
+pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     trace!("kernel: sys_trace");
-    -1
+    let token = current_user_token();
+    let page_table = PageTable::from_token(token);
+    let va = VirtAddr::from(id);
+
+    let not_read_or_write_or = match page_table.translate(va.floor()) {
+        Some(vpn) => !vpn.readable() || !vpn.writable(),
+        None => true,
+    };
+
+    match trace_request {
+        0 => {
+            if not_read_or_write_or {
+                -1
+            } else {
+                unsafe { *(id as *const u8) as isize }
+            }
+        }
+        1 => {
+            if not_read_or_write_or {
+                -1
+            } else {
+                unsafe {
+                    *(id as *mut u8) = data as u8;
+                }
+                0
+            }
+        }
+        2 => call_time(id),
+        _ => -1,
+    }
 }
 
 // YOUR JOB: Implement mmap.

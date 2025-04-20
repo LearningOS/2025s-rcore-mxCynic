@@ -153,6 +153,17 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    fn call_time_add(&self, id: usize) {
+        let current = self.inner.exclusive_access().current_task;
+        let mut inner = self.inner.exclusive_access();
+        inner.tasks[current].calltime_add(id);
+    }
+
+    fn call_time(&self, id: usize) -> isize {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].calltime(id)
+    }
 }
 
 /// Run the first task in task list.
@@ -201,4 +212,14 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Increments the invocation counter for the specified system call.
+pub fn call_time_add(id: usize) {
+    TASK_MANAGER.call_time_add(id)
+}
+
+/// Returns the number of times the specified system call has been invoked.
+pub fn call_time(id: usize) -> isize {
+    TASK_MANAGER.call_time(id)
 }

@@ -6,6 +6,7 @@ use crate::mm::{
 };
 use crate::trap::{trap_handler, TrapContext};
 
+const MAX_SYS_CALL: usize = 500;
 /// The task control block (TCB) of a task.
 pub struct TaskControlBlock {
     /// Save task context
@@ -28,6 +29,9 @@ pub struct TaskControlBlock {
 
     /// Program break
     pub program_brk: usize,
+
+    /// calltimes
+    pub calltimes: [isize; MAX_SYS_CALL],
 }
 
 impl TaskControlBlock {
@@ -63,6 +67,7 @@ impl TaskControlBlock {
             base_size: user_sp,
             heap_bottom: user_sp,
             program_brk: user_sp,
+            calltimes: [0; MAX_SYS_CALL],
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -95,6 +100,16 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+
+    /// increment syscall times
+    pub fn calltime_add(&mut self, syscall_id: usize) {
+        self.calltimes[syscall_id] += 1;
+    }
+
+    /// return syscall times
+    pub fn calltime(&self, syscall_id: usize) -> isize {
+        self.calltimes[syscall_id]
     }
 }
 
