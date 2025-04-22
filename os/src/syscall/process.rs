@@ -1,7 +1,8 @@
 //! Process management syscalls
 
 use crate::{
-    mm::{translated_byte_buffer, PageTable, VirtAddr},
+    config::PAGE_SIZE,
+    mm::{translated_byte_buffer, MapPermission, PageTable, VirtAddr, KERNEL_SPACE},
     task::{
         call_time, change_program_brk, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next,
@@ -40,11 +41,9 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
         sec: us / 1_000_000,
         usec: us % 1_000_000,
     };
-    let token = current_user_token();
-    let ptr = ts as *const u8;
-    let len = core::mem::size_of::<TimeVal>();
 
-    let buffers = translated_byte_buffer(token, ptr, len);
+    let len = core::mem::size_of::<TimeVal>();
+    let buffers = translated_byte_buffer(current_user_token(), ts as *const u8, len);
     let src = unsafe { core::slice::from_raw_parts(&time as *const TimeVal as *const u8, len) };
     let mut offset = 0;
 
@@ -72,27 +71,28 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     let page_table = PageTable::from_token(token);
     let va = VirtAddr::from(id);
 
-    let not_read_or_write_or = match page_table.translate(va.floor()) {
-        Some(vpn) => !vpn.readable() || !vpn.writable(),
+    // error is true only when disreadable, diswriteable or id is not a Addres
+    let error = match page_table.translate(va.floor()) {
+        Some(pte) => !pte.readable() || !pte.writable(),
         None => true,
     };
 
     match trace_request {
         0 => {
-            if not_read_or_write_or {
-                -1
-            } else {
+            if !error {
                 unsafe { *(id as *const u8) as isize }
+            } else {
+                -1
             }
         }
         1 => {
-            if not_read_or_write_or {
-                -1
-            } else {
+            if !error {
                 unsafe {
                     *(id as *mut u8) = data as u8;
                 }
                 0
+            } else {
+                -1
             }
         }
         2 => call_time(id),
@@ -101,15 +101,79 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
 }
 
 // YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+pub fn sys_mmap(start: usize, len: usize, prot: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+
+    // start 没有按页大小对齐 || prot & !0x7 != 0 (prot 其余位必须为0) || prot & 0x7 = 0 (这样的内存无意义)
+    let error = (start & (PAGE_SIZE - 1) != 0) || (prot & !0x7 != 0) || (prot & 0x7 == 0);
+    let page = PageTable::from_token(current_user_token());
+    let mut result = 0;
+    let permisson = MapPermission::from_bits((prot as u8) << 1).unwrap();
+
+    if !error {
+        // let flags = PTEFlags::from_bits((prot as u8) << 1).unwrap() | PTEFlags::V;
+
+        // return 0 only if there are a vpn is maped to a ppn
+        let has_maped_vpn = (start..(start + len + PAGE_SIZE - 1))
+            .step_by(PAGE_SIZE)
+            .any(|s| {
+                let vpn = VirtAddr::from(s).floor();
+                page.translate(vpn).is_some()
+            });
+
+        if !has_maped_vpn {
+            // for s in (start..(start + len + PAGE_SIZE - 1)).step_by(PAGE_SIZE) {
+            //     let vpn = VirtAddr::from(s).floor();
+            //
+            //     let frame = match frame_alloc() {
+            //         Some(frame) => frame,
+            //         None => {
+            //             result = -1;
+            //             break;
+            //         }
+            //     };
+            //
+            //     let ppn = frame.ppn;
+            //
+            //     page.map(vpn, ppn, flags);
+            // }
+            //
+            KERNEL_SPACE.exclusive_access().insert_framed_area(
+                VirtAddr::from(start),
+                VirtAddr::from(start + len).ceil().into(),
+                permisson,
+            )
+        } else {
+            result = -1;
+        }
+    } else {
+        result = -1;
+    }
+
+    result
 }
 
 // YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+
+    // page.page_offset != 0 就是没有对齐
+
+    let mut page = PageTable::from_token(current_user_token());
+    let mut result = 0;
+
+    for s in (start..(start + len + PAGE_SIZE - 1)).step_by(PAGE_SIZE) {
+        let vpn = VirtAddr::from(s).floor();
+
+        match page.find_pte(vpn) {
+            Some(_) => page.unmap(vpn),
+            None => {
+                result = -1;
+                break;
+            }
+        }
+    }
+    result
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

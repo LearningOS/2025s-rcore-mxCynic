@@ -112,7 +112,13 @@ impl PageTable {
                 break;
             }
             if !pte.is_valid() {
-                let frame = frame_alloc().unwrap();
+                let frame = match frame_alloc() {
+                    Some(frame) => frame,
+                    None => {
+                        result = None;
+                        break;
+                    }
+                };
                 *pte = PageTableEntry::new(frame.ppn, PTEFlags::V);
                 self.frames.push(frame);
             }
@@ -121,7 +127,7 @@ impl PageTable {
         result
     }
     /// Find PageTableEntry by VirtPageNum
-    fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
+    pub fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
