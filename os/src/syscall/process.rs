@@ -2,7 +2,7 @@
 
 use crate::{
     config::PAGE_SIZE,
-    mm::{translated_byte_buffer, MapPermission, PageTable, VirtAddr, KERNEL_SPACE},
+    mm::{frame_alloc, translated_byte_buffer, PTEFlags, PageTable, VirtAddr, VirtPageNum},
     task::{
         call_time, change_program_brk, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next,
@@ -105,46 +105,31 @@ pub fn sys_mmap(start: usize, len: usize, prot: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
 
     // start 没有按页大小对齐 || prot & !0x7 != 0 (prot 其余位必须为0) || prot & 0x7 = 0 (这样的内存无意义)
-    let error = (start & (PAGE_SIZE - 1) != 0) || (prot & !0x7 != 0) || (prot & 0x7 == 0);
-    let page = PageTable::from_token(current_user_token());
+    if (start & (PAGE_SIZE - 1) != 0) || (prot & !0x7 != 0) || (prot & 0x7 == 0) {
+        return -1;
+    }
+    let mut page = PageTable::from_token(current_user_token());
     let mut result = 0;
-    let permisson = MapPermission::from_bits((prot as u8) << 1).unwrap();
+    let vpn_start = VirtAddr::from(start).floor();
+    let vpn_end = VirtAddr::from(start + len).ceil();
+    // let permisson = MapPermission::from_bits((prot as u8) << 1).unwrap();
 
-    if !error {
-        // let flags = PTEFlags::from_bits((prot as u8) << 1).unwrap() | PTEFlags::V;
+    let flags = PTEFlags::from_bits((prot as u8) << 1).unwrap() | PTEFlags::V | PTEFlags::U;
 
-        // return 0 only if there are a vpn is maped to a ppn
-        let has_maped_vpn = (start..(start + len + PAGE_SIZE - 1))
-            .step_by(PAGE_SIZE)
-            .any(|s| {
-                let vpn = VirtAddr::from(s).floor();
-                page.translate(vpn).is_some()
-            });
+    // return 0 only if there are a vpn is maped to a ppn
+    let has_maped_vpn =
+        (vpn_start.0..vpn_end.0).any(|vpn| page.translate(VirtPageNum(vpn)).is_some());
 
-        if !has_maped_vpn {
-            // for s in (start..(start + len + PAGE_SIZE - 1)).step_by(PAGE_SIZE) {
-            //     let vpn = VirtAddr::from(s).floor();
-            //
-            //     let frame = match frame_alloc() {
-            //         Some(frame) => frame,
-            //         None => {
-            //             result = -1;
-            //             break;
-            //         }
-            //     };
-            //
-            //     let ppn = frame.ppn;
-            //
-            //     page.map(vpn, ppn, flags);
-            // }
-            //
-            KERNEL_SPACE.exclusive_access().insert_framed_area(
-                VirtAddr::from(start),
-                VirtAddr::from(start + len).ceil().into(),
-                permisson,
-            )
-        } else {
-            result = -1;
+    if !has_maped_vpn {
+        for vpn in vpn_start.0..vpn_end.0 {
+            let vpn = VirtPageNum(vpn);
+            match frame_alloc() {
+                Some(frame) => page.map(vpn, frame.ppn, flags),
+                None => {
+                    result = -1;
+                    break;
+                }
+            }
         }
     } else {
         result = -1;
