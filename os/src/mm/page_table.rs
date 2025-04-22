@@ -112,13 +112,7 @@ impl PageTable {
                 break;
             }
             if !pte.is_valid() {
-                let frame = match frame_alloc() {
-                    Some(frame) => frame,
-                    None => {
-                        result = None;
-                        break;
-                    }
-                };
+                let frame = frame_alloc().unwrap();
                 *pte = PageTableEntry::new(frame.ppn, PTEFlags::V);
                 self.frames.push(frame);
             }
