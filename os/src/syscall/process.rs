@@ -2,10 +2,7 @@
 
 use crate::{
     config::PAGE_SIZE,
-    mm::{
-        frame_alloc, frame_dealloc, translated_byte_buffer, PTEFlags, PageTable, VirtAddr,
-        VirtPageNum,
-    },
+    mm::{frame_alloc, translated_byte_buffer, PTEFlags, PageTable, VirtAddr, VirtPageNum},
     task::{
         call_time, change_program_brk, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next,
@@ -70,34 +67,43 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     trace!("kernel: sys_trace");
+
+    const MAX_VA: usize = (1 << 38) - 1;
+    const MIN_VA: usize = (!0) << 38;
+
     let token = current_user_token();
     let page_table = PageTable::from_token(token);
     let va = VirtAddr::from(id);
 
-    // error is true only when disreadable, diswriteable or id is not a Addres
-    let error = match page_table.translate(va.floor()) {
-        Some(pte) => !pte.readable() || !pte.writable(),
-        None => true,
-    };
+    if !(id <= MAX_VA || id >= MIN_VA) {
+        return -1;
+    }
 
     match trace_request {
-        0 => {
-            if !error {
-                unsafe { *(id as *const u8) as isize }
-            } else {
-                -1
-            }
-        }
-        1 => {
-            if !error {
-                unsafe {
-                    *(id as *mut u8) = data as u8;
+        0 => match page_table.translate(va.floor()) {
+            Some(pte) => {
+                if pte.readable() {
+                    let buffers = translated_byte_buffer(token, id as *const u8, 1);
+                    buffers[0][0].into()
+                } else {
+                    -1
                 }
-                0
-            } else {
-                -1
             }
-        }
+            None => -1,
+        },
+        1 => match page_table.translate(va.floor()) {
+            Some(pte) => {
+                if pte.writable() {
+                    let mut buffers = translated_byte_buffer(token, id as *const u8, 10);
+                    buffers[0][0] = data as u8;
+
+                    0
+                } else {
+                    -1
+                }
+            }
+            None => -1,
+        },
         2 => call_time(id),
         _ => -1,
     }
@@ -106,7 +112,9 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(start: usize, len: usize, prot: usize) -> isize {
     // trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-
+    if len == 0 {
+        return -1;
+    }
     // start 没有按页大小对齐 || prot & !0x7 != 0 (prot 其余位必须为0) || prot & 0x7 = 0 (这样的内存无意义)
     if (start & (PAGE_SIZE - 1) != 0) || (prot & !0x7 != 0) || (prot & 0x7 == 0) {
         return -1;
@@ -143,8 +151,13 @@ pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
 
     // page.page_offset != 0 就是没有对齐
-
+    if len == 0 {
+        return -1;
+    }
     if (start & (PAGE_SIZE - 1)) != 0 {
+        return -1;
+    }
+    if (len & (PAGE_SIZE - 1)) != 0 {
         return -1;
     }
 
@@ -154,11 +167,8 @@ pub fn sys_munmap(start: usize, len: usize) -> isize {
 
     for vpn in vpn_start.0..vpn_end.0 {
         let vpn = VirtPageNum(vpn);
-        if let Some(pte) = page.find_pte(vpn) {
-            frame_dealloc(pte.ppn());
+        if page.find_pte(vpn).is_some() {
             page.unmap(vpn)
-        } else {
-            return -1;
         }
     }
     0
