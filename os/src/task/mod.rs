@@ -15,6 +15,7 @@ mod switch;
 mod task;
 
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::PageTable;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -164,6 +165,31 @@ impl TaskManager {
         let inner = self.inner.exclusive_access();
         inner.tasks[inner.current_task].calltime(id)
     }
+
+    //
+    fn mmap(&self, start: usize, len: usize, prot: usize) -> isize {
+        let token = self.get_current_token();
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+
+        let memory = &mut inner.tasks[current].memory_set;
+
+        let page_table = &mut PageTable::from_token(token);
+
+        memory.mmap(start, len, prot, page_table)
+    }
+    // doc
+    fn munmap(&self, start: usize, len: usize) -> isize {
+        let token = self.get_current_token();
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+
+        let memory = &mut inner.tasks[current].memory_set;
+
+        let page_table = &mut PageTable::from_token(token);
+
+        memory.munmap(start, len, page_table)
+    }
 }
 
 /// Run the first task in task list.
@@ -222,4 +248,12 @@ pub fn call_time_add(id: usize) {
 /// Returns the number of times the specified system call has been invoked.
 pub fn call_time(id: usize) -> isize {
     TASK_MANAGER.call_time(id)
+}
+/// mmap
+pub fn mmap(start: usize, len: usize, prot: usize) -> isize {
+    TASK_MANAGER.mmap(start, len, prot)
+}
+/// munmap
+pub fn munmap(start: usize, len: usize) -> isize {
+    TASK_MANAGER.munmap(start, len)
 }

@@ -78,9 +78,15 @@ impl FrameAllocator for StackFrameAllocator {
     fn dealloc(&mut self, ppn: PhysPageNum) {
         let ppn = ppn.0;
         // validity check
+        // println!("ppn       :{}", ppn);
+        // println!("current   :{}", self.current);
+        // println!("recycled  :{:?}", self.recycled);
+
         if ppn >= self.current || self.recycled.iter().any(|&v| v == ppn) {
+            // println!("{}", ppn);
             panic!("Frame ppn={:#x} has not been allocated!", ppn);
         }
+        // println!("");
         // recycle
         self.recycled.push(ppn);
     }
@@ -115,6 +121,12 @@ pub fn frame_alloc() -> Option<FrameTracker> {
 /// Deallocate a physical page frame with a given ppn
 pub fn frame_dealloc(ppn: PhysPageNum) {
     FRAME_ALLOCATOR.exclusive_access().dealloc(ppn);
+    // println!("[frame_dealloc] dealloc ppn = {:?}", ppn);
+    // assert!(
+    //     FRAME_ALLOCATOR.exclusive_access().recycled.contains(&ppn.0),
+    //     "ppn {:?} was not allocated!",
+    //     ppn
+    // );
 }
 
 #[allow(unused)]

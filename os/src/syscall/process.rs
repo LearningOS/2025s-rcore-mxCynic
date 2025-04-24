@@ -2,9 +2,9 @@
 
 use crate::{
     config::PAGE_SIZE,
-    mm::{frame_alloc, translated_byte_buffer, PTEFlags, PageTable, VirtAddr, VirtPageNum},
+    mm::{translated_byte_buffer, PageTable, VirtAddr},
     task::{
-        call_time, change_program_brk, current_user_token, exit_current_and_run_next,
+        call_time, change_program_brk, current_user_token, exit_current_and_run_next, mmap, munmap,
         suspend_current_and_run_next,
     },
     timer::get_time_us,
@@ -119,37 +119,8 @@ pub fn sys_mmap(start: usize, len: usize, prot: usize) -> isize {
     if (start & (PAGE_SIZE - 1) != 0) || (prot & !0x7 != 0) || (prot & 0x7 == 0) {
         return -1;
     }
-    let mut page = PageTable::from_token(current_user_token());
-    let vpn_start = VirtAddr::from(start).floor();
-    let vpn_end = VirtAddr::from(start + len).ceil();
-    println!("vs:   {:?}, ve:     {:?}", vpn_start, vpn_end);
 
-    let flags = PTEFlags::from_bits((prot as u8) << 1).unwrap() | PTEFlags::V | PTEFlags::U;
-
-    // return 0 only if there are a vpn is maped to a ppn
-    let has_maped_vpn = (vpn_start.0..vpn_end.0).any(|vpn| {
-        page.find_pte(VirtPageNum(vpn))
-            .map(|pte| pte.flags().contains(PTEFlags::V))
-            .unwrap_or(false)
-    });
-
-    if !has_maped_vpn {
-        for vpn in vpn_start.0..vpn_end.0 {
-            println!("vpn:  {}", vpn);
-            let vpn = VirtPageNum(vpn);
-            match frame_alloc() {
-                Some(frame) => page.map(vpn, frame.ppn, flags),
-                None => {
-                    return -1;
-                }
-            }
-        }
-    } else {
-        println!("maped");
-        return -1;
-    }
-
-    0
+    mmap(start, len, prot)
 }
 
 // YOUR JOB: Implement munmap.
@@ -157,27 +128,11 @@ pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
 
     // page.page_offset != 0 就是没有对齐
-    if len == 0 {
-        return -1;
-    }
-    if (start & (PAGE_SIZE - 1)) != 0 {
-        return -1;
-    }
-    if (len & (PAGE_SIZE - 1)) != 0 {
+    if len == 0 || (start & (PAGE_SIZE - 1)) != 0 || (len & (PAGE_SIZE - 1)) != 0 {
         return -1;
     }
 
-    let mut page = PageTable::from_token(current_user_token());
-    let vpn_start = VirtAddr::from(start).floor();
-    let vpn_end = VirtAddr::from(start + len).ceil();
-
-    for vpn in vpn_start.0..vpn_end.0 {
-        let vpn = VirtPageNum(vpn);
-        if page.find_pte(vpn).is_some() {
-            page.unmap(vpn)
-        }
-    }
-    0
+    munmap(start, len)
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {
