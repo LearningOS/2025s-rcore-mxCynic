@@ -20,6 +20,11 @@ pub struct Processor {
     ///The basic control flow of each core, helping to select and switch process
     idle_task_cx: TaskContext,
 }
+impl Default for Processor {
+    fn default() -> Self {
+        Processor::new()
+    }
+}
 
 impl Processor {
     ///Create an empty Processor
