@@ -20,6 +20,12 @@ pub struct TaskControlBlock {
     /// Kernel stack corresponding to PID
     pub kernel_stack: KernelStack,
 
+    /// stride:表示该进程当前已经运行的“长度”
+    pub stride: UPSafeCell<isize>,
+
+    /// pass:进程的优先权
+    pub pass: UPSafeCell<isize>,
+
     /// Mutable
     inner: UPSafeCell<TaskControlBlockInner>,
 }
@@ -124,11 +130,15 @@ impl TaskControlBlock {
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = kstack_alloc();
+        let stride = unsafe { UPSafeCell::new(0) };
+        let pass = unsafe { UPSafeCell::new(16) };
         let kernel_stack_top = kernel_stack.get_top();
         // push a task context which goes to trap_return to the top of kernel stack
         let task_control_block = Self {
             pid: pid_handle,
             kernel_stack,
+            stride,
+            pass,
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
@@ -198,10 +208,14 @@ impl TaskControlBlock {
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = kstack_alloc();
+        let stride = unsafe { UPSafeCell::new(0) };
+        let pass = unsafe { UPSafeCell::new(16) };
         let kernel_stack_top = kernel_stack.get_top();
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
+            stride,
+            pass,
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
@@ -257,6 +271,21 @@ impl TaskControlBlock {
             Some(old_break)
         } else {
             None
+        }
+    }
+
+    /// set_priority
+    pub fn set_priority(&self, prio: isize) -> isize {
+        let mut stride = self.stride.exclusive_access();
+        let mut pass = self.pass.exclusive_access();
+
+        if prio >= 2 {
+            *stride += *pass;
+            *pass = prio;
+
+            prio
+        } else {
+            -1
         }
     }
 }

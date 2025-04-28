@@ -8,7 +8,7 @@ use crate::{
     mm::{translated_byte_buffer, translated_refmut, translated_str},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next,
+        suspend_current_and_run_next, TaskControlBlock,
     },
     timer::get_time_us,
 };
@@ -229,6 +229,9 @@ pub fn sys_set_priority(prio: isize) -> isize {
     );
 
     if prio >= 2 {
+        let task: Arc<TaskControlBlock> = current_task().unwrap();
+        task.set_priority(prio);
+
         prio
     } else {
         -1
