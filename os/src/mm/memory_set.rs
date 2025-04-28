@@ -300,6 +300,79 @@ impl MemorySet {
             false
         }
     }
+    /// map a eara for vpn
+    pub fn mmap(
+        &mut self,
+        start: usize,
+        len: usize,
+        prot: usize,
+        page_table: &mut PageTable,
+    ) -> isize {
+        // let earas = &mut self.areas;
+        println!("map begin");
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr::from(start + len).ceil().into();
+        let map_perm = MapPermission::from_bits((prot as u8) << 1).unwrap() | MapPermission::U;
+
+        if self
+            .areas
+            .iter()
+            .any(|area| area.overlaps_with(start_va, end_va))
+        {
+            println!(
+                "[kernel] mmap failed: address range {:x?}..{:x?} overlaps with existing area",
+                start_va.0, end_va.0
+            );
+            println!("A-1");
+            return -1;
+        }
+        for vpn in start_va.floor().0..end_va.floor().0 {
+            if let Some(pte) = page_table.find_pte(VirtPageNum(vpn)) {
+                if pte.is_valid() {
+                    println!("[kernel] mmap failed: vpn {:#x} already mapped", vpn);
+                    println!("B-1");
+                    return -1;
+                }
+            }
+        }
+        // for eara in earas.iter() {}
+        let map_eara = MapArea::new(start_va, end_va, MapType::Framed, map_perm);
+
+        for vpn in start_va.floor().0..end_va.floor().0 {
+            let vpn = VirtPageNum(vpn);
+            println!("success map:{:?}", vpn);
+        }
+        println!("map end");
+
+        self.push(map_eara, None);
+        0
+    }
+
+    #[allow(unused_variables)]
+    /// munmap
+    pub fn munmap(&mut self, start: usize, len: usize, page_table: &mut PageTable) -> isize {
+        println!("munmp begin");
+        let areas = &mut self.areas;
+
+        let start_vpn = VirtAddr::from(start).floor();
+        let end_vpn = VirtAddr::from(start + len).ceil();
+
+        for vpn in start_vpn.0..end_vpn.0 {
+            let vpn = VirtPageNum(vpn);
+
+            for area in areas.iter_mut() {
+                if area.vpn_range.get_start() == vpn {
+                    area.unmap(page_table);
+                    println!("unmapp {:?} success", vpn);
+                    break;
+                }
+            }
+
+            areas.retain(|x| x.vpn_range.get_start() != vpn);
+        }
+        println!("munmp end");
+        0
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
@@ -399,6 +472,9 @@ impl MapArea {
             }
             current_vpn.step();
         }
+    }
+    pub fn overlaps_with(&self, start: VirtAddr, end: VirtAddr) -> bool {
+        !(end <= self.vpn_range.get_start().into() || start >= self.vpn_range.get_end().into())
     }
 }
 

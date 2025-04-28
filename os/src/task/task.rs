@@ -2,7 +2,7 @@
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MemorySet, PageTable, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -33,6 +33,29 @@ impl TaskControlBlock {
     pub fn get_user_token(&self) -> usize {
         let inner = self.inner_exclusive_access();
         inner.memory_set.token()
+    }
+
+    /// mmap
+    pub fn mmap(&self, start: usize, len: usize, prot: usize) -> isize {
+        let token = self.get_user_token();
+        let mut inner = self.inner_exclusive_access();
+
+        let memory = &mut inner.memory_set;
+
+        let page_table = &mut PageTable::from_token(token);
+
+        memory.mmap(start, len, prot, page_table)
+    }
+    /// munmap
+    pub fn munmap(&self, start: usize, len: usize) -> isize {
+        let token = self.get_user_token();
+        let mut inner = self.inner_exclusive_access();
+
+        let memory = &mut inner.memory_set;
+
+        let page_table = &mut PageTable::from_token(token);
+
+        memory.munmap(start, len, page_table)
     }
 }
 
