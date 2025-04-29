@@ -232,11 +232,11 @@ impl UserBuffer {
     }
     /// Get the length of the buffer
     pub fn len(&self) -> usize {
-        let mut total: usize = 0;
-        for b in self.buffers.iter() {
-            total += b.len();
-        }
-        total
+        self.buffers.concat().len()
+    }
+    /// get if len of the buffer
+    pub fn is_empty(&self) -> bool {
+        self.buffers.is_empty()
     }
 }
 
