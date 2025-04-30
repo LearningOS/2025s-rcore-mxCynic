@@ -3,7 +3,7 @@ use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
 use crate::fs::{File, Stdin, Stdout};
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MemorySet, PageTable, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -22,6 +22,12 @@ pub struct TaskControlBlock {
     /// Kernel stack corresponding to PID
     pub kernel_stack: KernelStack,
 
+    /// stride:表示该进程当前已经运行的“长度”
+    pub stride: UPSafeCell<isize>,
+
+    /// pass:进程的优先权
+    pub pass: UPSafeCell<isize>,
+
     /// Mutable
     inner: UPSafeCell<TaskControlBlockInner>,
 }
@@ -35,6 +41,28 @@ impl TaskControlBlock {
     pub fn get_user_token(&self) -> usize {
         let inner = self.inner_exclusive_access();
         inner.memory_set.token()
+    }
+    /// mmap
+    pub fn mmap(&self, start: usize, len: usize, prot: usize) -> isize {
+        let token = self.get_user_token();
+        let mut inner = self.inner_exclusive_access();
+
+        let memory = &mut inner.memory_set;
+
+        let page_table = &mut PageTable::from_token(token);
+
+        memory.mmap(start, len, prot, page_table)
+    }
+    /// munmap
+    pub fn munmap(&self, start: usize, len: usize) -> isize {
+        let token = self.get_user_token();
+        let mut inner = self.inner_exclusive_access();
+
+        let memory = &mut inner.memory_set;
+
+        let page_table = &mut PageTable::from_token(token);
+
+        memory.munmap(start, len, page_table)
     }
 }
 
@@ -110,11 +138,15 @@ impl TaskControlBlock {
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = kstack_alloc();
+        let stride = unsafe { UPSafeCell::new(0) };
+        let pass = unsafe { UPSafeCell::new(16) };
         let kernel_stack_top = kernel_stack.get_top();
         // push a task context which goes to trap_return to the top of kernel stack
         let task_control_block = Self {
             pid: pid_handle,
             kernel_stack,
+            stride,
+            pass,
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
@@ -190,6 +222,8 @@ impl TaskControlBlock {
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = kstack_alloc();
+        let stride = unsafe { UPSafeCell::new(0) };
+        let pass = unsafe { UPSafeCell::new(16) };
         let kernel_stack_top = kernel_stack.get_top();
         // copy fd table
         let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
@@ -203,6 +237,8 @@ impl TaskControlBlock {
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
+            stride,
+            pass,
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
@@ -259,6 +295,21 @@ impl TaskControlBlock {
             Some(old_break)
         } else {
             None
+        }
+    }
+
+    /// set_priority
+    pub fn set_priority(&self, prio: isize) -> isize {
+        let mut stride = self.stride.exclusive_access();
+        let mut pass = self.pass.exclusive_access();
+
+        if prio >= 2 {
+            *stride += *pass;
+            *pass = prio;
+
+            prio
+        } else {
+            -1
         }
     }
 }
