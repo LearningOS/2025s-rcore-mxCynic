@@ -164,7 +164,7 @@ impl MemorySet {
             memory_set.push(
                 MapArea::new(
                     (pair).0.into(),
-                    ((*pair).0 + (*pair).1).into(),
+                    ((pair).0 + (pair).1).into(),
                     MapType::Identical,
                     MapPermission::R | MapPermission::W,
                 ),
