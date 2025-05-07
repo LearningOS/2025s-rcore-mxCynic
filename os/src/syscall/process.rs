@@ -3,6 +3,7 @@
 use alloc::sync::Arc;
 
 use crate::{
+    config::PAGE_SIZE,
     fs::{open_file, OpenFlags},
     mm::{translated_byte_buffer, translated_refmut, translated_str},
     task::{
@@ -139,6 +140,11 @@ pub fn sys_mmap(start: usize, len: usize, prot: usize) -> isize {
         "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
+    // start 没有按页大小对齐 || prot & !0x7 != 0 (prot 其余位必须为0) || prot & 0x7 = 0 (这样的内存无意义)
+    // || 长度为0
+    if (start & (PAGE_SIZE - 1) != 0) || (prot & !0x7 != 0) || (prot & 0x7 == 0) || len == 0 {
+        return -1;
+    }
     current_task().unwrap().mmap(start, len, prot)
 }
 
@@ -148,6 +154,9 @@ pub fn sys_munmap(start: usize, len: usize) -> isize {
         "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
+    if len == 0 || (start & (PAGE_SIZE - 1)) != 0 || (len & (PAGE_SIZE - 1)) != 0 {
+        return -1;
+    }
     current_task().unwrap().munmap(start, len)
 }
 
