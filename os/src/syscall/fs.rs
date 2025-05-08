@@ -138,9 +138,5 @@ pub fn sys_unlinkat(name: *const u8) -> isize {
     let token = current_user_token();
     let file = translated_str(token, name);
 
-    if open_file(&file, OpenFlags::WRONLY).is_some() {
-        unlinkat(&file)
-    } else {
-        -1
-    }
+    unlinkat(&file)
 }

@@ -222,14 +222,16 @@ impl Inode {
 
     /// unlink
     pub fn unlinkat(&self, name: &str) -> isize {
-        if self.find(name).is_none() {
+        let inode = self.find(name);
+        if inode.is_none() {
             return -1;
         }
-        let inode = self.find(name).unwrap();
+        let inode = inode.unwrap();
 
-        inode.modify_disk_inode(|di| di.decrease_nlink());
-
-        let nlink = inode.nlink();
+        let nlink = inode.modify_disk_inode(|di| {
+            di.decrease_nlink();
+            di.nlink
+        });
 
         self.modify_disk_inode(|di| {
             let count = di.size as usize / DIRENT_SZ;
@@ -240,14 +242,13 @@ impl Inode {
                 if dirent.name() == name {
                     di.write_at(
                         i * DIRENT_SZ,
-                        DirEntry::empty().as_bytes_mut(),
+                        DirEntry::empty().as_bytes(),
                         &self.block_device,
                     );
                     break;
                 }
             }
         });
-
         if nlink == 0 {
             // 没有文件用这个数据了，删除目录项和数据，
             inode.clear();
