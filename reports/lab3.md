@@ -3,7 +3,9 @@
 
 ## 实现新得
 
-
+在查阅标准spawn的文档时，我注意到其中一个重要的地方：文档提到spawn是有三个步骤的,分别是fork,pre-exec,exec.项目中老师提到，
+spawn != fork + exec.关键的地方就在于这个pre-exec。文档中说到pre-exec() 步骤：内部处理 在 fork() 和 exec() 步骤之间，子进程可能
+需要执行一系列日常事务。posix_spawn() 和 posix_spawnp () 函数支持一组小型的、定义明确的 子进程可以先完成的系统任务 执行可执行文件。
 
 
 
@@ -11,6 +13,21 @@
 
 ## 简答作业
 
+### 实际情况是轮到 p1 执行吗？为什么？
+
+实际情况不是轮到p1,这是因为，p2在执行一段时间后，stride值会更新为250+10，由于是8bit无符号值，最终实际上值是5，那么在下次执行时，依然会执行p2.
+
+### 证明如下 
+
+```
+ 令P.pass = BigStride / P.priority
+P.pass >=2 
+BigStride / P.priority >= 2 
+BigStride / 2 >= P.priority
+```
+这意味着stride的步长是不会超过BigStride/2的。就是是说stride的最大值和最小值不会超过Bigstride/2
+
+ 
 
 ## 荣誉准则
 

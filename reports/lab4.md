@@ -5,7 +5,14 @@
 ## 实现新得
 
 在sys_fstat的实现过程中，意识到用户态传进来的地址不是内核态可用的地址，要用
-translated_refmut这个函数来翻译，得到内核态的地址。
+translated_refmut这个函数来翻译，得到内核态的地址。  
+在我们的项目代码中，文件都是挂载在ROOT下的，而文件都是Inode类型，每一个Inode值，都会唯一有一个inode_id值。
+Inode只负责描述文件，实际的磁盘空间则是由DiskInode来控制的,这两个类型就是通过inode_id来唯一的确定联系的，  
+实际上linkat和create有诸多相似的地方，唯一的不同是create会新建一个磁盘空间，需要alloc一个inode_id值，也就会新建
+一个DiskInode值。linkat则是直接取旧文件的inode_id值。  
+为了实现准确的link，我给DiskInode添加了一个nlink字段，用来推断一个DiskInode值被多少个Inode值共享，在linkat时，
+我能通过旧的inode，访问DiskInode，让其nlink+=1.在unlinkat时，我只需要将目录项置空，然后来检查nlink值，如果这个nlink
+已经归0了，那么就可以通过Inode类型的clear（）函数来清空磁盘了。否则只需要清空目录项
 
 
 
@@ -13,6 +20,19 @@ translated_refmut这个函数来翻译，得到内核态的地址。
 
 
 ## 简答作业
+
+### 第六章
+在我们的项目代码中，所有文件都是挂载在root inode的。如果root inode损坏的话，那么其中部分文件可能就无法访问了。
+这个损坏可能是提前clear()， （这个函数会情况当前inode下的所有空间）了，那么所有文件都会被清空。也可能出现其他意外.
+
+### 第七章 
+我平时常用n/vim，一个常用技巧如下 
+```
+python demo.py | vim -
+```
+这个命令可以用vim来查看前一个命令的标准输出
+这里pipe前可以是任意的命令，可以把前一个命令的标准输出传递给后面的命令，vim会有点特殊，需要加一个-参数才能读取标准输入。
+vim -也可以诶替换成less等等命令。
 
 
 ## 荣誉准则
@@ -26,6 +46,8 @@ translated_refmut这个函数来翻译，得到内核态的地址。
 
         《2018 RISC-V 手册》
         [posix_spawn](https://man7.org/linux/man-pages/man3/posix_spawn.3.html)
+        [linkat](https://linux.die.net/man/2/linkat)
+        [unlinkat](https://linux.die.net/man/2/unlinkat)
 
 3. 我独立完成了本次实验除以上方面之外的所有工作，包括代码与文档。 我清楚地知道，从以上方面获得的信息在一定程度上降低了实验难度，可能会影响起评分。
 
