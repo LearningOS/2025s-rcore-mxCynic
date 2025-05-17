@@ -7,7 +7,7 @@ use super::{add_task, SignalFlags};
 use super::{pid_alloc, PidHandle};
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
-use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell};
+use crate::sync::{Condvar, DeadLockDetector, Mutex, Semaphore, UPSafeCell};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
@@ -49,6 +49,12 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// enable dead lock detect
+    pub deadlock_detect_status: bool,
+    /// mutex Dead lock detect
+    pub mutex_dead_lock_detect: DeadLockDetector,
+    /// semaphore Dead lock detect
+    pub semaphore_dead_lock_detect: DeadLockDetector,
 }
 
 impl ProcessControlBlockInner {
@@ -81,6 +87,24 @@ impl ProcessControlBlockInner {
     /// get a task with tid in this process
     pub fn get_task(&self, tid: usize) -> Arc<TaskControlBlock> {
         self.tasks[tid].as_ref().unwrap().clone()
+    }
+    /// set dead lock staus
+    pub fn set_dead_detect(&mut self, status: bool) {
+        self.deadlock_detect_status = status;
+    }
+    pub fn init_mutex_deadlocl_shape(&mut self) {
+        let n = self.thread_count();
+        let m = self.mutex_list.len();
+
+        println!("init_deadlocl_mutex_shape: ({}, {})", n, m);
+        self.mutex_dead_lock_detect.init(n, m);
+    }
+    pub fn init_sem_deadlocl_shape(&mut self) {
+        let n = self.thread_count();
+        let m = self.semaphore_list.len();
+
+        println!("init_deadlocl_sem_shape: ({}, {})", n, m);
+        self.semaphore_dead_lock_detect.init(n, m);
     }
 }
 
@@ -119,6 +143,9 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detect_status: false,
+                    mutex_dead_lock_detect: DeadLockDetector::new(),
+                    semaphore_dead_lock_detect: DeadLockDetector::new(),
                 })
             },
         });
@@ -245,6 +272,9 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detect_status: false,
+                    mutex_dead_lock_detect: DeadLockDetector::new(),
+                    semaphore_dead_lock_detect: DeadLockDetector::new(),
                 })
             },
         });
@@ -281,5 +311,20 @@ impl ProcessControlBlock {
     /// get pid
     pub fn getpid(&self) -> usize {
         self.pid.0
+    }
+    ///set deadlock detect status
+    pub fn set_dead_detect(&self, status: bool) -> isize {
+        let inner = &mut self.inner_exclusive_access();
+        inner.set_dead_detect(status);
+        0
+    }
+
+    pub fn init_mutex_deadlocl_shape(&mut self) {
+        let mut inner = self.inner_exclusive_access();
+        inner.init_mutex_deadlocl_shape();
+    }
+    pub fn init_sem_deadlocl_shape(&mut self) {
+        let mut inner = self.inner_exclusive_access();
+        inner.init_sem_deadlocl_shape();
     }
 }

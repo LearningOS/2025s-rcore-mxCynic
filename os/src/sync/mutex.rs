@@ -19,6 +19,11 @@ pub struct MutexSpin {
     locked: UPSafeCell<bool>,
 }
 
+impl Default for MutexSpin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl MutexSpin {
     /// Create a new spinlock mutex
     pub fn new() -> Self {
@@ -62,6 +67,11 @@ pub struct MutexBlockingInner {
     wait_queue: VecDeque<Arc<TaskControlBlock>>,
 }
 
+impl Default for MutexBlocking {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl MutexBlocking {
     /// Create a new blocking mutex
     pub fn new() -> Self {
