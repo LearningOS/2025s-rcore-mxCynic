@@ -85,7 +85,7 @@ impl DeadLockDetector {
     }
     /// when new thread create
     pub fn incre_n(&mut self, tid: usize) {
-        println!("increning n");
+        // println!("increning n");
         let resource_count = if self.allocation.is_empty() {
             0
         } else {
@@ -97,14 +97,14 @@ impl DeadLockDetector {
             self.need.push(vec![0; resource_count]);
         }
 
-        println!("need       len: {}, meaning n", self.need.len());
-        println!("avialiable len: {}, meaning m", self.avialiable.len());
-        println!("incre_n @ {:p}", self);
+        // println!("need       len: {}, meaning n", self.need.len());
+        // println!("avialiable len: {}, meaning m", self.avialiable.len());
+        // println!("incre_n @ {:p}", self);
     }
 
     /// when try lock 意味着需要一个资源
     pub fn need(&mut self, tid: usize, rid: usize) {
-        println!("tid: {}, rid: {}", tid, rid);
+        // println!("tid: {}, rid: {}", tid, rid);
         self.need[tid][rid] += 1;
     }
 

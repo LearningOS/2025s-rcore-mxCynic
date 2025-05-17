@@ -53,7 +53,7 @@ pub fn sys_mutex_create(blocking: bool) -> isize {
         id as isize
     } else {
         process_inner.mutex_list.push(mutex);
-        println!("no unused mutex");
+        // println!("no unused mutex");
         if process_inner.mutex_list.len() == 1 {
             process_inner.init_mutex_deadlocl_shape();
         } else {
@@ -75,7 +75,7 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
             .unwrap()
             .tid
     );
-    println!("mutex lock!!!");
+    // println!("mutex lock!!!");
     let process = current_process();
     let mut process_inner = process.inner_exclusive_access();
 
@@ -86,15 +86,11 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
         .as_ref()
         .unwrap()
         .tid;
-    println!("{}", process_inner.mutex_dead_lock_detect);
-    println!(
-        "mutex lock :{:p}",
-        &process_inner.mutex_dead_lock_detect as *const _
-    );
+    // println!("{}", process_inner.mutex_dead_lock_detect);
     process_inner.mutex_dead_lock_detect.need(tid, mutex_id);
-    println!("{}", process_inner.mutex_dead_lock_detect);
+    // println!("{}", process_inner.mutex_dead_lock_detect);
     if process_inner.deadlock_detect_status && !process_inner.mutex_dead_lock_detect.detect() {
-        println!("mutex not safe");
+        // println!("mutex not safe");
         return -0xdead;
     }
     process_inner.mutex_dead_lock_detect.allocate(tid, mutex_id);
@@ -117,7 +113,7 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
             .unwrap()
             .tid
     );
-    println!("mutex unlock!!!");
+    // println!("mutex unlock!!!");
     let process = current_process();
     let mut process_inner = process.inner_exclusive_access();
     let tid = current_task()
