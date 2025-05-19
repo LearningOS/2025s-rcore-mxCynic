@@ -39,7 +39,12 @@ impl DeadLockDetector {
 
             for (i, if_finish) in finish.clone().iter().enumerate() {
                 // step2: finish[i] 是假的 && 所有的need[i][j] <= work[j]
-                if !if_finish && work.iter().enumerate().all(|(j, w)| &self.need[i][j] <= w) {
+                if !if_finish
+                    && self.need[i]
+                        .iter()
+                        .enumerate()
+                        .all(|(j, &need)| need <= work[j])
+                {
                     // setp3
                     for (j, &allocation) in self.allocation[i].iter().enumerate() {
                         work[j] += allocation;
@@ -57,14 +62,15 @@ impl DeadLockDetector {
         }
 
         // step4: 全部是finish是true,否则不安全
-        finish.iter().all(|&x| x)
+        let res = finish.iter().all(|&x| x);
+        res
     }
 
     /// init DeadLockDetector's shape
-    pub fn init(&mut self, n: usize, m: usize) {
+    pub fn init(&mut self, n: usize, m: usize, sem: usize) {
         //
         for _ in 0..m {
-            self.avialiable.push(1)
+            self.avialiable.push(sem)
         }
         let vec = vec![0; m];
 
@@ -75,8 +81,8 @@ impl DeadLockDetector {
     }
 
     /// when create new mutex
-    pub fn incre_m(&mut self) {
-        self.avialiable.push(1);
+    pub fn incre_m(&mut self, res_count: usize) {
+        self.avialiable.push(res_count);
 
         for i in 0..self.need.len() {
             self.allocation[i].push(0);
@@ -85,7 +91,6 @@ impl DeadLockDetector {
     }
     /// when new thread create
     pub fn incre_n(&mut self, tid: usize) {
-        // println!("increning n");
         let resource_count = if self.allocation.is_empty() {
             0
         } else {
@@ -96,34 +101,33 @@ impl DeadLockDetector {
             self.allocation.push(vec![0; resource_count]);
             self.need.push(vec![0; resource_count]);
         }
-
-        // println!("need       len: {}, meaning n", self.need.len());
-        // println!("avialiable len: {}, meaning m", self.avialiable.len());
-        // println!("incre_n @ {:p}", self);
     }
 
     /// when try lock 意味着需要一个资源
     pub fn need(&mut self, tid: usize, rid: usize) {
-        // println!("tid: {}, rid: {}", tid, rid);
         self.need[tid][rid] += 1;
+    }
+    /// 检查到死锁，把死锁前尝试的值回复
+    pub fn deneed(&mut self, tid: usize, rid: usize) {
+        self.need[tid][rid] -= 1;
     }
 
     /// try lock
     pub fn allocate(&mut self, tid: usize, rid: usize) {
-        if self.avialiable[rid] > 0 {
-            self.avialiable[rid] -= 1;
-        }
+        self.avialiable[rid] -= 1;
         self.allocation[tid][rid] += 1;
-        if self.need[tid][rid] > 0 {
-            self.need[tid][rid] -= 1;
-        }
+        self.need[tid][rid] -= 1;
     }
 
     /// when unlock
     pub fn dealloc(&mut self, tid: usize, rid: usize) {
         self.avialiable[rid] += 1;
         self.allocation[tid][rid] -= 1;
-        self.need[tid][rid] += 1;
+        // self.need[tid][rid] += 1;
+    }
+    /// return the clone of avialiable
+    pub fn avialiable(&self) -> Vec<usize> {
+        self.avialiable.clone()
     }
 }
 

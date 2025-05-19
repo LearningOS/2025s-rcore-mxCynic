@@ -96,15 +96,15 @@ impl ProcessControlBlockInner {
         let n = self.thread_count();
         let m = self.mutex_list.len();
 
-        println!("init_deadlocl_mutex_shape: ({}, {})", n, m);
-        self.mutex_dead_lock_detect.init(n, m);
+        // println!("init_deadlocl_mutex_shape: ({}, {})", n, m);
+        self.mutex_dead_lock_detect.init(n, m, 1);
     }
-    pub fn init_sem_deadlocl_shape(&mut self) {
+    pub fn init_sem_deadlocl_shape(&mut self, sem: usize) {
         let n = self.thread_count();
         let m = self.semaphore_list.len();
 
-        println!("init_deadlocl_sem_shape: ({}, {})", n, m);
-        self.semaphore_dead_lock_detect.init(n, m);
+        // println!("init_deadlocl_sem_shape: ({}, {})", n, m);
+        self.semaphore_dead_lock_detect.init(n, m, sem);
     }
 }
 
@@ -317,14 +317,5 @@ impl ProcessControlBlock {
         let inner = &mut self.inner_exclusive_access();
         inner.set_dead_detect(status);
         0
-    }
-
-    pub fn init_mutex_deadlocl_shape(&mut self) {
-        let mut inner = self.inner_exclusive_access();
-        inner.init_mutex_deadlocl_shape();
-    }
-    pub fn init_sem_deadlocl_shape(&mut self) {
-        let mut inner = self.inner_exclusive_access();
-        inner.init_sem_deadlocl_shape();
     }
 }

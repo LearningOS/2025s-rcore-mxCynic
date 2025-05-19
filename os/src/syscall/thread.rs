@@ -34,9 +34,9 @@ pub fn sys_thread_create(entry: usize, arg: usize) -> isize {
     let new_task_inner = new_task.inner_exclusive_access();
     let new_task_res = new_task_inner.res.as_ref().unwrap();
     let new_task_tid = new_task_res.tid;
-    println!("tid: {}", new_task_tid);
+    // println!("tid: {}", new_task_tid);
     if new_task_tid != 0 {
-        println!("tid != 0, detect incre n. tid: {}", new_task_tid);
+        // println!("tid != 0, detect incre n. tid: {}", new_task_tid);
         process
             .inner_exclusive_access()
             .semaphore_dead_lock_detect

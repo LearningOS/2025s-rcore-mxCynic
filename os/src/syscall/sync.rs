@@ -49,15 +49,13 @@ pub fn sys_mutex_create(blocking: bool) -> isize {
         .map(|(id, _)| id)
     {
         process_inner.mutex_list[id] = mutex;
-        println!("has unused mutex");
         id as isize
     } else {
         process_inner.mutex_list.push(mutex);
-        // println!("no unused mutex");
         if process_inner.mutex_list.len() == 1 {
             process_inner.init_mutex_deadlocl_shape();
         } else {
-            process_inner.mutex_dead_lock_detect.incre_m();
+            process_inner.mutex_dead_lock_detect.incre_m(1);
         }
         process_inner.mutex_list.len() as isize - 1
     }
@@ -75,7 +73,6 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
             .unwrap()
             .tid
     );
-    // println!("mutex lock!!!");
     let process = current_process();
     let mut process_inner = process.inner_exclusive_access();
 
@@ -86,11 +83,8 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
         .as_ref()
         .unwrap()
         .tid;
-    // println!("{}", process_inner.mutex_dead_lock_detect);
     process_inner.mutex_dead_lock_detect.need(tid, mutex_id);
-    // println!("{}", process_inner.mutex_dead_lock_detect);
     if process_inner.deadlock_detect_status && !process_inner.mutex_dead_lock_detect.detect() {
-        // println!("mutex not safe");
         return -0xdead;
     }
     process_inner.mutex_dead_lock_detect.allocate(tid, mutex_id);
@@ -113,7 +107,6 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
             .unwrap()
             .tid
     );
-    // println!("mutex unlock!!!");
     let process = current_process();
     let mut process_inner = process.inner_exclusive_access();
     let tid = current_task()
@@ -159,18 +152,13 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
         process_inner
             .semaphore_list
             .push(Some(Arc::new(Semaphore::new(res_count))));
-        println!("no unused sem");
-        println!("sem len: {}", process_inner.semaphore_list.len());
         if process_inner.semaphore_list.len() == 1 {
-            process_inner.init_sem_deadlocl_shape();
-            println!("init succ");
+            process_inner.init_sem_deadlocl_shape(res_count);
         } else {
-            process_inner.semaphore_dead_lock_detect.incre_m();
-            println!("incre succ");
+            process_inner.semaphore_dead_lock_detect.incre_m(res_count);
         }
         process_inner.semaphore_list.len() - 1
     };
-    println!("sem id:{}", id);
     id as isize
 }
 /// semaphore up syscall
@@ -187,7 +175,7 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
             .tid
     );
     let process = current_process();
-    let mut process_inner = process.inner_exclusive_access();
+    let process_inner = process.inner_exclusive_access();
     let tid = current_task()
         .unwrap()
         .inner_exclusive_access()
@@ -195,14 +183,15 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
         .as_ref()
         .unwrap()
         .tid;
+    let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
+    drop(process_inner);
+    sem.up();
     if sem_id != 0 {
+        let mut process_inner = process.inner_exclusive_access();
         process_inner
             .semaphore_dead_lock_detect
             .dealloc(tid, sem_id);
     }
-    let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
-    drop(process_inner);
-    sem.up();
     0
 }
 /// semaphore down syscall
@@ -229,24 +218,18 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
     let process = current_process();
     let mut process_inner = process.inner_exclusive_access();
 
-    if sem_id != 0 {
-        println!("{}", process_inner.semaphore_dead_lock_detect);
-        println!("tid: {}, sem_id: {} Need one", tid, sem_id);
-        process_inner.semaphore_dead_lock_detect.need(tid, sem_id);
-        println!("{}", process_inner.semaphore_dead_lock_detect);
-        if process_inner.deadlock_detect_status
-            && !process_inner.semaphore_dead_lock_detect.detect()
-        {
-            println!("sem not safe");
-            return -0xdead;
-        }
-        process_inner
-            .semaphore_dead_lock_detect
-            .allocate(tid, sem_id);
+    process_inner.semaphore_dead_lock_detect.need(tid, sem_id);
+    if process_inner.deadlock_detect_status && !process_inner.semaphore_dead_lock_detect.detect() {
+        process_inner.semaphore_dead_lock_detect.deneed(tid, sem_id);
+        return -0xdead;
     }
     let sem = Arc::clone(process_inner.semaphore_list[sem_id].as_ref().unwrap());
     drop(process_inner);
     sem.down();
+    let mut process_inner = process.inner_exclusive_access();
+    process_inner
+        .semaphore_dead_lock_detect
+        .allocate(tid, sem_id);
     0
 }
 /// condvar create syscall
